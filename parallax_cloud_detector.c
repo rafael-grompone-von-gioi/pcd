@@ -22,7 +22,6 @@
 #include <stdlib.h>
 #include <math.h>
 #include <float.h>
-#include "iio.h" /* CHH */
 
 /*----------------------------------------------------------------------------*/
 #ifndef M_PI
@@ -73,8 +72,7 @@ static double norm_angle_error(double a, double b)
    the output components gx and gy must be already allocated
  */
 static void image_gradient_direction( double * image, double * gx, double * gy,
-                                      int X, int Y,
-                                      unsigned char * input_mask) /* CHH */
+                                      int X, int Y )
 {
   int x,y;
 
@@ -86,27 +84,19 @@ static void image_gradient_direction( double * image, double * gx, double * gy,
   for(x=1; x<X-1; x++)
   for(y=1; y<Y-1; y++)
     {
-      if(input_mask[x+y*X] > 0) /* CHH: use mask, set to 0. gradient for */
-        {                       /*      invalid pixels (else clause)     */
-          double norm;
+      double norm;
 
-          /* compute image gradient */
-          gx[x+y*X] = image[x+1 +  y   *X] - image[x-1 +  y   *X];
-          gy[x+y*X] = image[x   + (y+1)*X] - image[x   + (y-1)*X];
+      /* compute image gradient */
+      gx[x+y*X] = image[x+1 +  y   *X] - image[x-1 +  y   *X];
+      gy[x+y*X] = image[x   + (y+1)*X] - image[x   + (y-1)*X];
 
-          norm = sqrt( gx[x+y*X] * gx[x+y*X] + gy[x+y*X] * gy[x+y*X] );
+      norm = sqrt( gx[x+y*X] * gx[x+y*X] + gy[x+y*X] * gy[x+y*X] );
 
-          /* normalize norm to 1, except for null gradient */
-          if( norm > 0.0 )
-            {
-              gx[x+y*X] /= norm;
-              gy[x+y*X] /= norm;
-            }
-        }
-      else
+      /* normalize norm to 1, except for null gradient */
+      if( norm > 0.0 )
         {
-          gx[x+y*X] = 0.;
-          gy[x+y*X] = 0.;
+          gx[x+y*X] /= norm;
+          gy[x+y*X] /= norm;
         }
     }
 }
@@ -125,144 +115,85 @@ static void image_gradient_direction( double * image, double * gx, double * gy,
    D      : maximal offset length to be evaluated
  */
 static double * offset_angle_per_pair( double * images, int X, int Y, int N,
-                                       int W, int D, double T,
-                                       unsigned char * input_mask ) /* CHH */
+                                       int W, int D )
 {
   int U = (X - 2 - 2*D) / W;
   int V = (Y - 2 - 2*D) / W;
   int DD = 2 * D + 1; /* size of correlation matrix */
   double * correlation = (double *) xmalloc( DD * DD * sizeof(double) );
   double * angle;
-  double * oflow_x; /* CHH */
-  double * oflow_y; /* CHH */
   double * gx;
   double * gy;
-  int u,v,i,iii;  /* CHH iii */
-  char filenameA[128]; /* CHH */
-  char filenameB[128]; /* CHH */
+  int u,v,i;
 
   /* get memory */
   gx    = (double *) xmalloc( X * Y * 2 * N * sizeof(double) );
   gy    = (double *) xmalloc( X * Y * 2 * N * sizeof(double) );
   angle = (double *) xmalloc( U * V * N * sizeof(double) );
-  oflow_x = (double *) xmalloc( U * V * N * sizeof(double) ); /* CHH */
-  oflow_y = (double *) xmalloc( U * V * N * sizeof(double) ); /* CHH */
 
   /* compute image gradient direction (the norm is normalized to 1) */
   for(i=0; i<2*N; i++)
-    {
-      image_gradient_direction(images+i*X*Y, gx+i*X*Y, gy+i*X*Y, X, Y, input_mask);
-      /* << CHH */
-      /* sprintf(filenameA, "/tmp/pcd_gradient_x_image_%d.tif", i); */
-      /* sprintf(filenameB, "/tmp/pcd_gradient_y_image_%d.tif", i); */
-      /* fprintf(stderr, "Writing gradient x for pair %d\n", i); */
-      /* iio_write_image_double(filenameA, gx+i*X*Y, X, Y); */
-      /* fprintf(stderr, "Writing gradient y for pair %d\n", i); */
-      /* iio_write_image_double(filenameB, gy+i*X*Y, X, Y); */
-      /* CHH >> */
-    }
+    image_gradient_direction(images+i*X*Y, gx+i*X*Y, gy+i*X*Y, X, Y);
 
   /* compute local offset direction for each pairs of images */
   for(u=0; u<U; u++)  /* loops on spatial coordinates */
   for(v=0; v<V; v++)
+  for(i=0; i<N; i++)  /* loop on image pairs */
     {
+      double max = -DBL_MAX;  /* max of gradient correlation */
+      int mx,my,dx,dy,xx,yy;
       int x = 1 + D + u * W;
       int y = 1 + D + v * W;
 
-      if(input_mask[x+y*X] > 0)
+      mx = my = -D;  /*  initialize offset of best correlation */
+      for(dx=-D; dx<=D; dx++)  /* loops on relative offset to be evaluated */
+      for(dy=-D; dy<=D; dy++)
         {
-          for(i=0; i<N; i++)  /* loop on image pairs */
+          double c = 0.0;  /* initialize gradient correlation */
+
+          /* compute the correlation of the image gradient direction */
+          for(xx=x; xx<x+W; xx++)  /* loop on correlation window */
+          for(yy=y; yy<y+W; yy++)
+            c += gx[xx + yy*X + 2*i*X*Y] * gx[xx+dx + (yy+dy)*X + (2*i+1)*X*Y]
+               + gy[xx + yy*X + 2*i*X*Y] * gy[xx+dx + (yy+dy)*X + (2*i+1)*X*Y];
+
+          /* store correlation (to be used for sub-pixel interpolation */
+          correlation[ (dx+D) + (dy+D) * DD ] = c;
+
+          if( c > max )  /* update max of gradient correlation */
             {
-              double max = -DBL_MAX;  /* max of gradient correlation */
-              int mx,my,dx,dy,xx,yy;
-
-              mx = my = -D;  /*  initialize offset of best correlation */
-              for(dx=-D; dx<=D; dx++)  /* loops on relative offset to be evaluated */
-              for(dy=-D; dy<=D; dy++)
-                {
-                  double c = 0.0;  /* initialize gradient correlation */
-
-                  /* compute the correlation of the image gradient direction */
-                  for(xx=x; xx<x+W; xx++)  /* loop on correlation window */
-                  for(yy=y; yy<y+W; yy++)
-                    c += gx[xx + yy*X + 2*i*X*Y] * gx[xx+dx + (yy+dy)*X + (2*i+1)*X*Y]
-                       + gy[xx + yy*X + 2*i*X*Y] * gy[xx+dx + (yy+dy)*X + (2*i+1)*X*Y];
-
-                  /* store correlation (to be used for sub-pixel interpolation */
-                  correlation[ (dx+D) + (dy+D) * DD ] = c;
-
-                  if( c > max )  /* update max of gradient correlation */
-                    {
-                      max = c;
-                      mx = dx;  /* mx,my is offset of best correlation */
-                      my = dy;
-                    }
-                }
-
-              /* if the maximal correlation is not at the border of the correlation
-                 domain perform a second order interpolation of the offset.
-                 otherwise, or if the best offset is null, set as undefined
-               */
-              if( mx > -D && mx < D && my > -D && my < D ) // && (mx != 0 || my != 0) )
-                {
-                  double ax = correlation[ (mx-1+D) + (my+D) * DD ];
-                  double bx = correlation[ (mx  +D) + (my+D) * DD ];
-                  double cx = correlation[ (mx+1+D) + (my+D) * DD ];
-                  double DX = (double) mx + 0.5 * (ax - cx) / (ax - bx - bx + cx);
-
-                  double ay = correlation[ (mx+D) + (my-1+D) * DD ];
-                  double by = correlation[ (mx+D) + (my  +D) * DD ];
-                  double cy = correlation[ (mx+D) + (my+1+D) * DD ];
-                  double DY = (double) my + 0.5 * (ay - cy) / (ay - by - by + cy);
-
-                  if(DX*DX + DY*DY < T*T)
-                    {
-                      oflow_x[u + v*U + i*U*V] = NAN; /* CHH */
-                      oflow_y[u + v*U + i*U*V] = NAN; /* CHH */
-                      angle[u + v*U + i*U*V] = UNDEF; /* UNDEF */
-                    }
-                  else
-                    {
-                      oflow_x[u + v*U + i*U*V] = DX; /* CHH */
-                      oflow_y[u + v*U + i*U*V] = DY; /* CHH */
-                      angle[u + v*U + i*U*V] = atan2(DY,DX);
-                    }
-                }
-              else
-                {
-                  oflow_x[u + v*U + i*U*V] = NAN; /* CHH */
-                  oflow_y[u + v*U + i*U*V] = NAN; /* CHH */
-                  angle[u + v*U + i*U*V] = UNDEF; /* UNDEF */
-                }
+              max = c;
+              mx = dx;  /* mx,my is offset of best correlation */
+              my = dy;
             }
         }
-      else /* CHH invalid pixels according to input_mask */
-      {
-        for(i=0; i<N; i++)
-          angle[u + v*U + i*U*V] = UNDEF;
-      }
-    }
 
-  for(iii=0; iii<N; iii++)  /* loop on image pairs */
-    {
-      /* << CHH write angle images */
-      /* fprintf(stderr, "Writing angle\n"); */
-      /* sprintf(filenameA, "/tmp/pcd_angle_image_%d.tif", iii); */
-      /* iio_write_image_double(filenameA, angle+iii*U*V, U, V); */
-      /* fprintf(stderr, "Writing optical flow\n"); */
-      /* sprintf(filenameA, "/tmp/pcd_oflow_x_image_%d.tif", iii); */
-      /* iio_write_image_double(filenameA, oflow_x+iii*U*V, U, V); */
-      /* sprintf(filenameA, "/tmp/pcd_oflow_y_image_%d.tif", iii); */
-      /* iio_write_image_double(filenameA, oflow_y+iii*U*V, U, V); */
-      /* CHH >> */
+      /* if the maximal correlation is not at the border of the correlation
+         domain perform a second order interpolation of the offset.
+         otherwise, or if the best offset is null, set as undefined
+       */
+      if( mx > -D && mx < D && my > -D && my < D && (mx != 0 || my != 0) )
+        {
+          double ax = correlation[ (mx-1+D) + (my+D) * DD ];
+          double bx = correlation[ (mx  +D) + (my+D) * DD ];
+          double cx = correlation[ (mx+1+D) + (my+D) * DD ];
+          double DX = (double) mx + 0.5 * (ax - cx) / (ax - bx - bx + cx);
+
+          double ay = correlation[ (mx+D) + (my-1+D) * DD ];
+          double by = correlation[ (mx+D) + (my  +D) * DD ];
+          double cy = correlation[ (mx+D) + (my+1+D) * DD ];
+          double DY = (double) my + 0.5 * (ay - cy) / (ay - by - by + cy);
+
+          angle[u + v*U + i*U*V] = atan2(DY,DX);
+        }
+      else
+        angle[u + v*U + i*U*V] = UNDEF;
     }
 
   /* free memory */
   free( (void *) gx );
   free( (void *) gy );
   free( (void *) correlation );
-  free( (void *) oflow_x );
-  free( (void *) oflow_y );
 
   return angle;
 }
@@ -297,12 +228,9 @@ static int number_angle_agreements( double * angle, int U, int V, int N,
    N      : number of image pairs
    W      : size of the square correlation window
    D      : maximal offset length to be evaluated
-   input_mask: mask for valid pixels (do not apply the detector where
-               pixels are not valid). 0 for invalid and 255 for valid.
  */
 void parallax_cloud_detector( double * cloud_mask, double * images,
-                              int X, int Y, int N, int W, int D, double T,
-                              unsigned char * input_mask) /* CHH */
+                              int X, int Y, int N, int W, int D )
 {
   int P = 6;  /* p of size P: list of precision values used in region growing */
   double p[] = { 0.025, 0.05, 0.1, 0.2, 0.3, 0.4 };
@@ -317,11 +245,10 @@ void parallax_cloud_detector( double * cloud_mask, double * images,
   double * angle;
   int i,j,k,l,n,u,v,uu,vv;
   double log_nfa;
-  int region_label = 1;  /* CHH */
 
   /* compute 'optical flow' for each of the N pairs of images
      and keep the angle at each position for each pair */
-  angle = offset_angle_per_pair(images,X,Y,N,W,D,T,input_mask); /* CHH */
+  angle = offset_angle_per_pair(images,X,Y,N,W,D);
 
   /* initialize cloud masks */
   for(i=0; i<X*Y; i++) cloud_mask[i] = 0.0;
@@ -397,31 +324,17 @@ void parallax_cloud_detector( double * cloud_mask, double * images,
 
           /* if meaningful, add the region to the output cloud mask */
           if( log_nfa < 0.0 )
-            {
-              for(n=0; n<reg_n; n++)
-                {
-                  int x = 1 + D + reg_x[n] * W;
-                  int y = 1 + D + reg_y[n] * W;
-                  int xx,yy;
-                  for(xx=x; xx < x+W; xx++)  /* loops on pixels corresponding */
-                  for(yy=y; yy < y+W; yy++)  /* to the correlation window     */
-                    cloud_mask[xx+yy*X] += 16;
-                    /* cloud_mask[xx+yy*X] = (double) region_label;  /1* CHH 255.0; *1/ */
-                }
-              region_label = region_label + 1; /* CHH */
-            }
+            for(n=0; n<reg_n; n++)
+              {
+                int x = 1 + D + reg_x[n] * W;
+                int y = 1 + D + reg_y[n] * W;
+                int xx,yy;
+                for(xx=x; xx < x+W; xx++)  /* loops on pixels corresponding */
+                for(yy=y; yy < y+W; yy++)  /* to the correlation window     */
+                  cloud_mask[xx+yy*X] = 255.0;
+              }
         }
-      /* CHH >>
-      sprintf(filenameA, "/tmp/cloud_mask_precision_%d.tif", l);
-      fprintf(stderr, "%s\n", filenameA);
-      iio_write_image_double(cloud_mask, X, Y);
-      CHH << */
     }
-
-  for(int y=0; y<Y; y++)
-  for(int x=0; x<X; x++)
-  if(cloud_mask[x+y*X] > 0.0)
-    cloud_mask[x+y*X] += 159.0; /* 159 * 6*16 = 255 */
 
   /* free memory */
   free( (void *) angle );

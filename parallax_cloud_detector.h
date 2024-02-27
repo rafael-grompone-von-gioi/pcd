@@ -22,7 +22,7 @@
 #define PARALLAX_CLOUD_DETECTOR_HEADER
 
 /*----------------------------------------------------------------------------*/
-#define PARALLAX_CLOUD_DETECTOR_VERSION "0.7.dev0 (December 17, 2021)"
+#define PARALLAX_CLOUD_DETECTOR_VERSION "0.7 (April 15, 2020)"
 
 /*----------------------------------------------------------------------------*/
 /* compute a cloud mask by grouping regions with the same parallax angle
@@ -38,8 +38,7 @@
    D      : maximal offset length to be evaluated
  */
 void parallax_cloud_detector( double * cloud_mask, double * images,
-                              int X, int Y, int N, int W, int D, double T,
-                              unsigned char * input_mask);
+                              int X, int Y, int N, int W, int D );
 
 #endif /* !PARALLAX_CLOUD_DETECTOR_HEADER */
 /*----------------------------------------------------------------------------*/

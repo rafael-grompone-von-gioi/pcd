@@ -30,12 +30,6 @@ The compiling instruction is just
 
 from the directory where the source codes and the Makefile are located.
 
-A Python wrapper named `pcd` is provided. To install it as a Python module, run
-
-    pip install -e .
-
-from the directory where the file setup.py is located.
-
 
 Test
 ----
@@ -44,10 +38,6 @@ To verify a correct compilation you can apply the algorithm to the test images
 provided with:
 
   make test
-
-To test the pip installation you may run
-
-  pcd data/sentinel2/img{1,2,3}.tif k.png
 
 
 Running
@@ -65,11 +55,6 @@ and 255 in the regions detected as clouds.
 
 The input and output can be in any image format handled by Enric Meinhardt's
 IIO library (https://github.com/mnhrdt/iio).
-
-The same result should be obtained through the command line interface of the
-Python wrapper:
-
-  pcd data/sentinel2/img{1,2,3}.tif k.png
 
 
 Copyright and License
