@@ -1,4 +1,4 @@
-IIO=-DNDEBUG -std=c99 -lpng -ltiff -ljpeg
+IIO=-lpng -ltiff -ljpeg
 OPT= -O3
 
 parallax_cloud_detector: main.c parallax_cloud_detector.c iio.c
