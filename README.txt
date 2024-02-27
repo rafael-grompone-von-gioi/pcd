@@ -21,6 +21,28 @@ cG.tif                     - Green channel of the sample satellite image
 cB.tif                     - Blue channel of the sample satellite image
 
 
+Requirements
+------------
+
+This program requires a C language compiler.  By default, the libraries
+libtiff, libjpeg, and libpng are used for image input/output.
+
+In GNU/Linux these libraries may be installed with a command similar to the
+following:
+
+  apt install libtiff-dev libpng-dev libjpeg-dev
+
+The exact command may depend on the particular distribution used; the exact
+package names may also vary depending on the distribution.
+
+On MacOS systems using Homebrew (https://brew.sh), these libraries may be
+installed with the following command:
+
+  brew install libtiff libpng libjpeg
+
+See below how to compile without installing these libraries.
+
+
 Compiling
 ---------
 
@@ -29,6 +51,26 @@ The compiling instruction is just
   make
 
 from the directory where the source codes and the Makefile are located.
+
+
+Compiling without libtiff, libpng, and libjpeg
+----------------------------------------------
+
+This program can be compiled and used without installing any library.  In this
+case, only image file formats built-in in IIO are available; this includes:
+PGM, ASC, NPY, etc.
+
+In this case, two files must be modified before compiling.  On the one hand,
+the following lines must be commented in iio.c:
+
+  #define I_CAN_HAS_LIBPNG
+  #define I_CAN_HAS_LIBJPEG
+  #define I_CAN_HAS_LIBTIFF
+
+On the other hand, those three libraries (-lpng -ltiff -ljpeg) must be removed
+from the compilation command, resulting in:
+
+  cc -O3 -o parallax_cloud_detector main.c parallax_cloud_detector.c iio.c -lm
 
 
 Test
